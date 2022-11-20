@@ -127,79 +127,83 @@ int main(int argc, char *argv[])
     if ((ret_code = mm_read_mtx_crd_size(f, &rows, &cols, &nz)) != 0)
         exit(1);
 
-    // printf("Lines: %d\nColumns: %d\nNon-zero: %d\n", rows, cols, nz);
+    //printf("Lines: %d\nColumns: %d\nNon-zero: %d\n", rows, cols, nz);
 
-    // CSR data structure
+    // CSC data structure
     int value;
-    int CSR_ROW_INDEX[rows + 1];
-    int CSR_COL_INDEX[nz];
-    int readRow;
+    int* CSC_COL_INDEX = (int *) malloc((cols + 1) * sizeof(int));
+    int* CSC_ROW_INDEX = (int *) malloc(nz * sizeof(int));
+    int readCol;
 
-    for (i = 0; i < rows + 1; i++)
-        CSR_ROW_INDEX[i] = 0;
+    for (i = 0; i < cols + 1; i++)
+        CSC_COL_INDEX[i] = 0;
 
     for (i = 0; i < nz; i++)
     {
-        fscanf(f, "%d %d %d\n", &value, &readRow, &CSR_COL_INDEX[i]);
-        CSR_COL_INDEX[i]--;
-        CSR_ROW_INDEX[readRow]++;
+        fscanf(f, "%d %d %d\n", &CSC_ROW_INDEX[i], &readCol, &value);
+        CSC_ROW_INDEX[i]--;
+        CSC_COL_INDEX[readCol]++;
     }
 
+    for (i = 0; i < cols; i++)
+        CSC_COL_INDEX[i + 1] += CSC_COL_INDEX[i];
+
+    // CSR data structure
+    int* CSR_COL_INDEX = (int *) malloc(nz * sizeof(int));
+    int* CSR_ROW_INDEX = (int *) malloc((rows + 1) * sizeof(int));
+    int row, dest, temp, last = 0, cumsum = 0;
+
+    for (i = 0; i < rows + 1; i++){
+        CSR_ROW_INDEX[i] = 0;
+    }
+
+    // CONVERT CSC TO CSR
+    for (i = 0; i < nz; i++)
+        CSR_ROW_INDEX[CSC_ROW_INDEX[i]]++;
+
     for (i = 0; i < rows; i++)
-        CSR_ROW_INDEX[i + 1] += CSR_ROW_INDEX[i];
-
-    // CSC data structure
-    int CSC_ROW_INDEX[nz];
-    int CSC_COL_INDEX[cols + 1];
-    int col, dest, temp, last = 0, cumsum = 0;
-
-    for (i = 0; i < nz; i++)
-        CSC_COL_INDEX[i] = 0;
-    // CONVERT CSR TO CSC
-    for (i = 0; i < nz; i++)
-        CSC_COL_INDEX[CSR_COL_INDEX[i]]++;
+    {
+        temp = CSR_ROW_INDEX[i];
+        CSR_ROW_INDEX[i] = cumsum;
+        cumsum += temp;
+    }
+    CSR_ROW_INDEX[rows] = nz;
 
     for (i = 0; i < cols; i++)
     {
-        temp = CSC_COL_INDEX[i];
-        CSC_COL_INDEX[i] = cumsum;
-        cumsum += temp;
-    }
-    CSC_COL_INDEX[cols] = nz;
-
-    for (i = 0; i < rows; i++)
-    {
-        for (j = CSR_ROW_INDEX[i]; j < CSR_ROW_INDEX[i + 1]; j++)
+        for (j = CSC_COL_INDEX[i]; j < CSC_COL_INDEX[i + 1]; j++)
         {
-            col = CSR_COL_INDEX[j];
-            dest = CSC_COL_INDEX[col];
+            row = CSC_ROW_INDEX[j];
+            dest = CSR_ROW_INDEX[row];
 
-            CSC_ROW_INDEX[dest] = i;
+            CSR_COL_INDEX[dest] = i;
 
-            CSC_COL_INDEX[col]++;
+            CSR_ROW_INDEX[row]++;
         }
     }
 
-    for (i = 0; i < cols + 1; i++)
+    for (i = 0; i < rows + 1; i++)
     {
-        temp = CSC_COL_INDEX[i];
-        CSC_COL_INDEX[i] = last;
+        temp = CSR_ROW_INDEX[i];
+        CSR_ROW_INDEX[i] = last;
         last = temp;
     }
 
-    int *SCCIDs = ColoringSCC(CSR_ROW_INDEX, CSR_COL_INDEX, CSC_ROW_INDEX, CSC_COL_INDEX, rows);
+    int *SCCIDs = coloringSCC(CSR_ROW_INDEX, CSR_COL_INDEX, CSC_ROW_INDEX, CSC_COL_INDEX, rows);
+/*
+    int* showTimes = (int *) calloc(rows + 1, sizeof(int));
 
-/*     int* showTimes = (int *) calloc(rows, sizeof(int));
-
-    for (i = 0; i < rows; i++) {
+    for (i = 0; i < rows + 1; i++) {
         showTimes[SCCIDs[i]]++;
     }
-    int sum = 0;
+    int sum = 0, trivial = 0;
     for (i = 0; i < rows; i++) {
-        if (showTimes[i] != 1)
+        if (showTimes[i] > 1)
             sum++;
+        else if (showTimes[i] == 1)
+            trivial++;
     }
-    printf("%d\n", sum); */
+    printf("%d %d\n", sum, trivial); */
 
     return 0;
 }
