@@ -16,8 +16,7 @@ int BFS(int *SCVc, int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, 
         v = queue[i--];
         for (j = colsIncomingEdges[v]; j < colsIncomingEdges[v + 1]; j++){
             if (colors[rowsIncomingEdges[j]] == u + 1 && visited[rowsIncomingEdges[j]] != 1) {
-                printf("neighboooooor %d %d\n", j, v);
-                queue[++i] = colors[rowsIncomingEdges[j]];
+                queue[++i] = rowsIncomingEdges[j];
                 SCVc[size++] = rowsIncomingEdges[j];
                 visited[rowsIncomingEdges[j]] = 1;
             }
@@ -70,15 +69,11 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
         } while (colorChange);
 
         for (i = 0; i < numVertices; i++)
-            printf("%d %d\n", vertices[i], colors[i]);
-        for (i = 0; i < numVertices; i++)
         {
             // check only vertices that kept their original color
             if (colors[i] != i + 1)
                 continue;
-            printf("MPAINW GIA VERTICE: %d\n", vertices[i]);
 
-            printf("VERTICES PRIN: %d\n", verticesRemaining);
             int* SCVc = (int *) calloc(numVertices, sizeof(int));
             size = BFS(SCVc, colors, rowsIncomingEdges, colsIncomingEdges, i, numVertices);
 
@@ -88,14 +83,12 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
                 vertices[SCVc[j]] = 0;  // remove vertices of the SCVc from initial V
                 verticesRemaining--;
             }
-            printf("VERTICES META: %d\n", verticesRemaining);
+            printf("VERTICES REMAINING: %d\n", verticesRemaining);
             id++;
+            free(SCVc);
         }
-
-        //for(i = 0; i < numVertices; i++)
-         //   printf("%d %d\n", vertices[i], colors[i]);
     }
-    //printf("vertices remaing: %d\n", verticesRemaining);
+
     return SCCIDs;
 }
 
