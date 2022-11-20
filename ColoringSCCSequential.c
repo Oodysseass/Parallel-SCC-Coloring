@@ -30,8 +30,8 @@ int BFS(int *SCVc, int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, 
     return size;
 }
 
-// Coloring Algorithm
-int *ColoringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomingEdges, int *colsIncomingEdges, int numVertices)
+// coloring algorithm
+int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomingEdges, int *colsIncomingEdges, int numVertices)
 {
     int *colors = (int *)malloc(numVertices * sizeof(int));
     int *vertices = (int *)malloc(numVertices * sizeof(int));
@@ -48,7 +48,6 @@ int *ColoringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
     {
         for (i = 0; i < numVertices; i++)
         {
-            
             colors[i] = vertices[i];
         }
 
@@ -71,37 +70,35 @@ int *ColoringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
         } while (colorChange);
 
         for (i = 0; i < numVertices; i++)
+            printf("%d %d\n", vertices[i], colors[i]);
+        for (i = 0; i < numVertices; i++)
         {
             // check only vertices that kept their original color
             if (colors[i] != i + 1)
                 continue;
+            printf("MPAINW GIA VERTICE: %d\n", vertices[i]);
 
-            int *Vc = (int *)calloc(numVertices, sizeof(int)); // worst case scenario, all vertices have the same color
-            for (j = 0; j < numVertices; j++)
+            printf("VERTICES PRIN: %d\n", verticesRemaining);
+            int* SCVc = (int *) calloc(numVertices, sizeof(int));
+            size = BFS(SCVc, colors, rowsIncomingEdges, colsIncomingEdges, i, numVertices);
+
+            for (j = 0; j < size; j++)
             {
-                if (colors[j] == colors[i])
-                    Vc[j] = 1;
-            }
-
-            size = findSize(Vc, rowsIncomingEdges, colsIncomingEdges, i);
-            int SCVc[size + 1];
-            if (size != 0)
-                BFS(Vc, rowsIncomingEdges, colsIncomingEdges, i, &SCVc[0]);
-            SCVc[size] = i;
-
-            for (j = 0; j < size + 1; j++)
-            {
-                SCCIDs[SCVc[j]] = id; // vertices of the SCVc have the same id
-                vertices[SCVc[j]] = 0; // remove vertices of the SCVc from initial V
+                SCCIDs[SCVc[j]] = id;   // vertices of the SCVc have the same id
+                vertices[SCVc[j]] = 0;  // remove vertices of the SCVc from initial V
                 verticesRemaining--;
             }
+            printf("VERTICES META: %d\n", verticesRemaining);
             id++;
-            free(Vc);
         }
-    }
 
+        //for(i = 0; i < numVertices; i++)
+         //   printf("%d %d\n", vertices[i], colors[i]);
+    }
+    //printf("vertices remaing: %d\n", verticesRemaining);
     return SCCIDs;
 }
+
 
 int main(int argc, char *argv[])
 {
