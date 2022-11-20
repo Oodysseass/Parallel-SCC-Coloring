@@ -2,28 +2,32 @@
 #include <stdlib.h>
 #include "mmio.h"
 
-int findSize(int *Vc, int *rowsIncomingEdges, int *colsIncomingEdges, int u)
+int BFS(int *SCVc, int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int numVertices)
 {
-    int size = 0, i;
-    for (i = colsIncomingEdges[u]; i < colsIncomingEdges[u + 1]; i++) // all vertices for which there is an edge <v, u>
-    {
-        if (Vc[rowsIncomingEdges[i]] == 1) // vertices for which there is an edge <v, u> AND have the same color as u
-            size++;
-    }
-    return size;
-}
+    int i = -1, j, size = 0;
+    int* queue = (int *) calloc(numVertices, sizeof(int));
+    int* visited = (int *) calloc(numVertices, sizeof(int));
+    int v;
+    queue[++i] = u;
+    visited[u] = 1;
+    SCVc[size++] = u;
 
-void BFS(int *Vc, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int *SCVc)
-{
-    int i, j = 0;
-
-    for (i = colsIncomingEdges[u]; i < colsIncomingEdges[u + 1]; i++)
-    {
-        if (Vc[rowsIncomingEdges[i]] == 1)
-        {
-            SCVc[j++] = rowsIncomingEdges[i];
+    while (i != -1) {
+        v = queue[i--];
+        for (j = colsIncomingEdges[v]; j < colsIncomingEdges[v + 1]; j++){
+            if (colors[rowsIncomingEdges[j]] == u + 1 && visited[rowsIncomingEdges[j]] != 1) {
+                printf("neighboooooor %d %d\n", j, v);
+                queue[++i] = colors[rowsIncomingEdges[j]];
+                SCVc[size++] = rowsIncomingEdges[j];
+                visited[rowsIncomingEdges[j]] = 1;
+            }
         }
     }
+
+    free(queue);
+    free(visited);
+
+    return size;
 }
 
 // Coloring Algorithm
