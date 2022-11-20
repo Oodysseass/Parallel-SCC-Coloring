@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include "mmio.h"
 
+int CC = 0;
+int trivial = 0;
+
 int BFS(int *SCVc, int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int numVertices)
 {
     int i = -1, j, size = 0;
@@ -76,6 +79,10 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
 
             int* SCVc = (int *) calloc(numVertices, sizeof(int));
             size = BFS(SCVc, colors, rowsIncomingEdges, colsIncomingEdges, i, numVertices);
+            if (size > 1)
+                CC++;
+            else
+                trivial++;
 
             for (j = 0; j < size; j++)
             {
@@ -184,20 +191,8 @@ int main(int argc, char *argv[])
     }
 
     int *SCCIDs = coloringSCC(CSR_ROW_INDEX, CSR_COL_INDEX, CSC_ROW_INDEX, CSC_COL_INDEX, rows);
-/*
-    int* showTimes = (int *) calloc(rows + 1, sizeof(int));
 
-    for (i = 0; i < rows + 1; i++) {
-        showTimes[SCCIDs[i]]++;
-    }
-    int sum = 0, trivial = 0;
-    for (i = 0; i < rows; i++) {
-        if (showTimes[i] > 1)
-            sum++;
-        else if (showTimes[i] == 1)
-            trivial++;
-    }
-    printf("%d %d\n", sum, trivial); */
+    printf("SCCs: %d, Trivial: %d\n", CC, trivial);
 
     return 0;
 }
