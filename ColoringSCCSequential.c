@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include "mmio.h"
 
 int CC = 0;
@@ -90,7 +91,7 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
                 vertices[SCVc[j]] = 0;  // remove vertices of the SCVc from initial V
                 verticesRemaining--;
             }
-            printf("VERTICES REMAINING: %d\n", verticesRemaining);
+
             id++;
             free(SCVc);
         }
@@ -128,10 +129,8 @@ int main(int argc, char *argv[])
     if ((ret_code = mm_read_mtx_crd_size(f, &rows, &cols, &nz)) != 0)
         exit(1);
 
-    //printf("Lines: %d\nColumns: %d\nNon-zero: %d\n", rows, cols, nz);
 
     // CSC data structure
-    int value;
     int* CSC_COL_INDEX = (int *) malloc((cols + 1) * sizeof(int));
     int* CSC_ROW_INDEX = (int *) malloc(nz * sizeof(int));
     int readCol;
@@ -139,11 +138,22 @@ int main(int argc, char *argv[])
     for (i = 0; i < cols + 1; i++)
         CSC_COL_INDEX[i] = 0;
 
-    for (i = 0; i < nz; i++)
+    if (matcode[2] == 'I' || matcode[2] == 'R')
     {
-        fscanf(f, "%d %d %d\n", &CSC_ROW_INDEX[i], &readCol, &value);
-        CSC_ROW_INDEX[i]--;
-        CSC_COL_INDEX[readCol]++;
+        double value;
+        for (i = 0; i < nz; i++)
+        {
+            fscanf(f, "%d %d %lf\n", &CSC_ROW_INDEX[i], &readCol, &value);
+            CSC_ROW_INDEX[i]--;
+            CSC_COL_INDEX[readCol]++;
+        }
+    } else {
+        for (i = 0; i < nz; i++)
+        {
+            fscanf(f, "%d %d\n", &CSC_ROW_INDEX[i], &readCol);
+            CSC_ROW_INDEX[i]--;
+            CSC_COL_INDEX[readCol]++;
+        }
     }
 
     for (i = 0; i < cols; i++)
@@ -190,9 +200,18 @@ int main(int argc, char *argv[])
         last = temp;
     }
 
+    fclose(f);
+
+    printf("Rows: %d\nColumns: %d\nNon-zero: %d\n", rows, cols, nz);
+
+    clock_t time;
+
+    time = clock();
     int *SCCIDs = coloringSCC(CSR_ROW_INDEX, CSR_COL_INDEX, CSC_ROW_INDEX, CSC_COL_INDEX, rows);
+    time = clock() - time;
 
     printf("SCCs: %d, Trivial: %d\n", CC, trivial);
+    printf("Time taken: %f\n", ((double) time) / CLOCKS_PER_SEC);
 
     return 0;
 }
