@@ -4,25 +4,27 @@
 #include <cilk/cilk.h>
 #include "mmio.h"
 
-int CC = 0;
-int trivial = 0;
 
-int BFS(int *SCVc, int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int numVertices)
+int BFS(int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int numVertices, int *vertices, int *SSCIDs)
 {
     int i = -1, j, size = 0;
-    int* queue = (int *) calloc(numVertices, sizeof(int));
-    int* visited = (int *) calloc(numVertices, sizeof(int));
+    int *queue = (int *)calloc(numVertices, sizeof(int));
+    int *visited = (int *)calloc(numVertices, sizeof(int));
     int v;
     queue[++i] = u;
     visited[u] = 1;
-    SCVc[size++] = u;
 
-    while (i != -1) {
+    while (i != -1)
+    {
         v = queue[i--];
-        for (j = colsIncomingEdges[v]; j < colsIncomingEdges[v + 1]; j++){
-            if (colors[rowsIncomingEdges[j]] == u + 1 && visited[rowsIncomingEdges[j]] != 1) {
+        vertices[v] = 0;
+        SSCIDs[v] = u + 1;
+        size++;
+        for (j = colsIncomingEdges[v]; j < colsIncomingEdges[v + 1]; j++)
+        {
+            if (colors[rowsIncomingEdges[j]] == u + 1 && visited[rowsIncomingEdges[j]] != 1)
+            {
                 queue[++i] = rowsIncomingEdges[j];
-                SCVc[size++] = rowsIncomingEdges[j];
                 visited[rowsIncomingEdges[j]] = 1;
             }
         }
@@ -34,16 +36,16 @@ int BFS(int *SCVc, int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, 
     return size;
 }
 
-// coloring algorithm
 int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomingEdges, int *colsIncomingEdges, int numVertices)
 {
     int *colors = (int *)malloc(numVertices * sizeof(int));
     int *vertices = (int *)malloc(numVertices * sizeof(int));
-    int *SCCIDs = (int *)malloc(numVertices * sizeof(int));
+    int *SCCIDs = (int *)calloc(numVertices, sizeof(int));
+    int *verticesRemoved = (int *)calloc(numVertices, sizeof(int));
 
     int verticesRemaining = numVertices;
+    int i;
     int colorChange;
-    int i, j, id = 1, size;
 
     for (i = 0; i < numVertices; i++)
         vertices[i] = i + 1;
@@ -57,50 +59,51 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
 
         do
         {
+            int *colorChanges = (int *)calloc(numVertices, sizeof(int));
             colorChange = 0;
-            cilk_for(int k = 0; k < numVertices; k++)
+            cilk_for(int j = 0; j < numVertices; j++)
             {
-                if (vertices[k] == 0) // if vertices[k] == 0, vertice with id = k + 1 has been removed
+                if (vertices[j] == 0) // if vertices[j] == 0, vertice with id = j + 1 has been removed
                     continue;
-                for (j = rowsOutgoingEdges[k]; j < rowsOutgoingEdges[k + 1]; j++)
+
+                for (int k = rowsOutgoingEdges[j]; k < rowsOutgoingEdges[j + 1]; k++)
                 {
-                    if (colors[k] > colors[colsOutgoingEdges[j]] && vertices[colsOutgoingEdges[j]] != 0)
+                    if (colors[j] > colors[colsOutgoingEdges[k]] && vertices[colsOutgoingEdges[k]] != 0)
                     {
-                        colors[colsOutgoingEdges[j]] = colors[k];
-                        colorChange = 1;
+                        colors[colsOutgoingEdges[k]] = colors[j];
+                        colorChanges[j] = 1;
                     }
                 }
             }
+            for (i = 0; i < numVertices; i++){
+                if (colorChanges[i] == 1){
+                    colorChange = 1;
+                    break;
+                }
+            }
+            free(colorChanges);
         } while (colorChange);
 
-        cilk_for(int k = 0; k < numVertices; k++)
+        cilk_for(int j = 0; j < numVertices; j++)
         {
             // check only vertices that kept their original color
-            if (colors[k] != k + 1)
+            if (colors[j] != j + 1)
                 continue;
 
-            int* SCVc = (int *) calloc(numVertices, sizeof(int));
-            size = BFS(SCVc, colors, rowsIncomingEdges, colsIncomingEdges, k, numVertices);
-            if (size > 1)
-                CC++;
-            else
-                trivial++;
-
-            for (j = 0; j < size; j++)
-            {
-                SCCIDs[SCVc[j]] = id;   // vertices of the SCVc have the same id
-                vertices[SCVc[j]] = 0;  // remove vertices of the SCVc from initial V
-                verticesRemaining--;
-            }
-
-            id++;
-            free(SCVc);
+            int size = BFS(colors, rowsIncomingEdges, colsIncomingEdges, j, numVertices, vertices, SCCIDs);
+            verticesRemoved[j] += size;
+        }
+        for (i = 0; i < numVertices; i++)
+        {
+            verticesRemaining -= verticesRemoved[i];
+            verticesRemoved[i] = 0;
+            if (verticesRemaining == 0)
+                break;
         }
     }
 
     return SCCIDs;
 }
-
 
 int main(int argc, char *argv[])
 {
@@ -130,10 +133,9 @@ int main(int argc, char *argv[])
     if ((ret_code = mm_read_mtx_crd_size(f, &rows, &cols, &nz)) != 0)
         exit(1);
 
-
     // CSC data structure
-    int* CSC_COL_INDEX = (int *) malloc((cols + 1) * sizeof(int));
-    int* CSC_ROW_INDEX = (int *) malloc(nz * sizeof(int));
+    int *CSC_COL_INDEX = (int *)malloc((cols + 1) * sizeof(int));
+    int *CSC_ROW_INDEX = (int *)malloc(nz * sizeof(int));
     int readCol;
 
     for (i = 0; i < cols + 1; i++)
@@ -148,7 +150,9 @@ int main(int argc, char *argv[])
             CSC_ROW_INDEX[i]--;
             CSC_COL_INDEX[readCol]++;
         }
-    } else {
+    }
+    else
+    {
         for (i = 0; i < nz; i++)
         {
             fscanf(f, "%d %d\n", &CSC_ROW_INDEX[i], &readCol);
@@ -161,11 +165,12 @@ int main(int argc, char *argv[])
         CSC_COL_INDEX[i + 1] += CSC_COL_INDEX[i];
 
     // CSR data structure
-    int* CSR_COL_INDEX = (int *) malloc(nz * sizeof(int));
-    int* CSR_ROW_INDEX = (int *) malloc((rows + 1) * sizeof(int));
+    int *CSR_COL_INDEX = (int *)malloc(nz * sizeof(int));
+    int *CSR_ROW_INDEX = (int *)malloc((rows + 1) * sizeof(int));
     int row, dest, temp, last = 0, cumsum = 0;
 
-    for (i = 0; i < rows + 1; i++){
+    for (i = 0; i < rows + 1; i++)
+    {
         CSR_ROW_INDEX[i] = 0;
     }
 
@@ -211,7 +216,21 @@ int main(int argc, char *argv[])
     int *SCCIDs = coloringSCC(CSR_ROW_INDEX, CSR_COL_INDEX, CSC_ROW_INDEX, CSC_COL_INDEX, rows);
     time = clock() - time;
 
-    printf("SCCs: %d, Trivial: %d\n", CC, trivial);
+    int *showTimes = (int *)calloc(rows + 1, sizeof(int));
+    int CC = 0, TRIVIAL = 0;
+
+    for (i = 0; i < rows; i++)
+        showTimes[SCCIDs[i]]++;
+    for (i = 1; i < rows + 1; i++)
+    {
+        if (showTimes[i] == 1)
+            TRIVIAL++;
+        else if (showTimes[i] > 1)
+            CC++;
+    }
+
+
+    printf("SCCs: %d, Trivial: %d\n", CC, TRIVIAL);
     printf("Time taken: %f\n", ((double) time) / CLOCKS_PER_SEC);
 
     return 0;
