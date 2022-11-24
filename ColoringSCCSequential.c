@@ -1,27 +1,29 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
+#include <sys/time.h>
 #include "mmio.h"
 
-int CC = 0;
-int trivial = 0;
 
-int BFS(int *SCVc, int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int numVertices)
+int BFS(int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int numVertices, int *vertices, int *SSCIDs)
 {
     int i = -1, j, size = 0;
-    int* queue = (int *) calloc(numVertices, sizeof(int));
-    int* visited = (int *) calloc(numVertices, sizeof(int));
+    int *queue = (int *)calloc(numVertices, sizeof(int));
+    int *visited = (int *)calloc(numVertices, sizeof(int));
     int v;
     queue[++i] = u;
     visited[u] = 1;
-    SCVc[size++] = u;
 
-    while (i != -1) {
+    while (i != -1)
+    {
         v = queue[i--];
-        for (j = colsIncomingEdges[v]; j < colsIncomingEdges[v + 1]; j++){
-            if (colors[rowsIncomingEdges[j]] == u + 1 && visited[rowsIncomingEdges[j]] != 1) {
+        vertices[v] = 0;
+        SSCIDs[v] = u + 1;
+        size++;
+        for (j = colsIncomingEdges[v]; j < colsIncomingEdges[v + 1]; j++)
+        {
+            if (colors[rowsIncomingEdges[j]] == u + 1 && visited[rowsIncomingEdges[j]] != 1)
+            {
                 queue[++i] = rowsIncomingEdges[j];
-                SCVc[size++] = rowsIncomingEdges[j];
                 visited[rowsIncomingEdges[j]] = 1;
             }
         }
@@ -42,7 +44,7 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
 
     int verticesRemaining = numVertices;
     int colorChange;
-    int i, j, id = 1, size;
+    int i, j, size;
 
     for (i = 0; i < numVertices; i++)
         vertices[i] = i + 1;
@@ -78,22 +80,8 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
             if (colors[i] != i + 1)
                 continue;
 
-            int* SCVc = (int *) calloc(numVertices, sizeof(int));
-            size = BFS(SCVc, colors, rowsIncomingEdges, colsIncomingEdges, i, numVertices);
-            if (size > 1)
-                CC++;
-            else
-                trivial++;
-
-            for (j = 0; j < size; j++)
-            {
-                SCCIDs[SCVc[j]] = id;   // vertices of the SCVc have the same id
-                vertices[SCVc[j]] = 0;  // remove vertices of the SCVc from initial V
-                verticesRemaining--;
-            }
-
-            id++;
-            free(SCVc);
+            int size = BFS(colors, rowsIncomingEdges, colsIncomingEdges, i, numVertices, vertices, SCCIDs);
+            verticesRemaining -= size;
         }
     }
 
@@ -204,14 +192,31 @@ int main(int argc, char *argv[])
 
     printf("Rows: %d\nColumns: %d\nNon-zero: %d\n", rows, cols, nz);
 
-    clock_t time;
+    struct timeval start, end;
 
-    time = clock();
+    gettimeofday(&start, NULL);
     int *SCCIDs = coloringSCC(CSR_ROW_INDEX, CSR_COL_INDEX, CSC_ROW_INDEX, CSC_COL_INDEX, rows);
-    time = clock() - time;
+    gettimeofday(&end, NULL);
 
-    printf("SCCs: %d, Trivial: %d\n", CC, trivial);
-    printf("Time taken: %f\n", ((double) time) / CLOCKS_PER_SEC);
+    int *showTimes = (int *)calloc(rows + 1, sizeof(int));
+    int CC = 0, TRIVIAL = 0;
+
+    for (i = 0; i < rows; i++)
+        showTimes[SCCIDs[i]]++;
+    for (i = 1; i < rows + 1; i++)
+    {
+        if (showTimes[i] == 1)
+            TRIVIAL++;
+        else if (showTimes[i] > 1)
+            CC++;
+    }
+
+    printf("SCCs: %d, Trivial: %d\n", CC, TRIVIAL);
+
+    long seconds = end.tv_sec - start.tv_sec;
+    long microseconds = end.tv_usec - start.tv_usec;
+    double elapsed = seconds + microseconds*1e-6;
+    printf("Time taken: %f\n", elapsed);
 
     return 0;
 }
