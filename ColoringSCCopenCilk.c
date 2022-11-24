@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
+#include <sys/time.h>
 #include <cilk/cilk.h>
 #include "mmio.h"
 
@@ -210,11 +210,11 @@ int main(int argc, char *argv[])
 
     printf("Rows: %d\nColumns: %d\nNon-zero: %d\n", rows, cols, nz);
 
-    clock_t time;
+    struct timeval start, end;
 
-    time = clock();
+    gettimeofday(&start, NULL);
     int *SCCIDs = coloringSCC(CSR_ROW_INDEX, CSR_COL_INDEX, CSC_ROW_INDEX, CSC_COL_INDEX, rows);
-    time = clock() - time;
+    gettimeofday(&end, NULL);
 
     int *showTimes = (int *)calloc(rows + 1, sizeof(int));
     int CC = 0, TRIVIAL = 0;
@@ -229,9 +229,12 @@ int main(int argc, char *argv[])
             CC++;
     }
 
-
     printf("SCCs: %d, Trivial: %d\n", CC, TRIVIAL);
-    printf("Time taken: %f\n", ((double) time) / CLOCKS_PER_SEC);
+
+    long seconds = end.tv_sec - start.tv_sec;
+    long microseconds = end.tv_usec - start.tv_usec;
+    double elapsed = seconds + microseconds*1e-6;
+    printf("Time taken: %f\n", elapsed);
 
     return 0;
 }
