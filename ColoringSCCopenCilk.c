@@ -4,7 +4,6 @@
 #include <cilk/cilk.h>
 #include "mmio.h"
 
-
 int BFS(int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int numVertices, int *vertices, int *SSCIDs)
 {
     int i = -1, j, size = 0;
@@ -75,8 +74,10 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
                     }
                 }
             }
-            for (i = 0; i < numVertices; i++){
-                if (colorChanges[i] == 1){
+            for (i = 0; i < numVertices; i++)
+            {
+                if (colorChanges[i] == 1)
+                {
                     colorChange = 1;
                     break;
                 }
@@ -105,6 +106,8 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
     return SCCIDs;
 }
 
+int trimmingCSC(int **colsPointers, int **rowsIndexes, int size, int nz);
+
 int main(int argc, char *argv[])
 {
     FILE *f;
@@ -132,6 +135,8 @@ int main(int argc, char *argv[])
 
     if ((ret_code = mm_read_mtx_crd_size(f, &rows, &cols, &nz)) != 0)
         exit(1);
+
+    printf("Rows: %d\nColumns: %d\nNon-zero: %d\n", rows, cols, nz);
 
     // CSC data structure
     int *CSC_COL_INDEX = (int *)malloc((cols + 1) * sizeof(int));
@@ -163,6 +168,11 @@ int main(int argc, char *argv[])
 
     for (i = 0; i < cols; i++)
         CSC_COL_INDEX[i + 1] += CSC_COL_INDEX[i];
+
+    int trimmed = trimmingCSC(&CSC_COL_INDEX, &CSC_ROW_INDEX, cols, nz);
+    cols = cols - trimmed;
+    rows = cols;
+    nz = CSC_COL_INDEX[cols];
 
     // CSR data structure
     int *CSR_COL_INDEX = (int *)malloc(nz * sizeof(int));
@@ -208,8 +218,6 @@ int main(int argc, char *argv[])
 
     fclose(f);
 
-    printf("Rows: %d\nColumns: %d\nNon-zero: %d\n", rows, cols, nz);
-
     struct timeval start, end;
 
     gettimeofday(&start, NULL);
@@ -229,12 +237,94 @@ int main(int argc, char *argv[])
             CC++;
     }
 
-    printf("SCCs: %d, Trivial: %d\n", CC, TRIVIAL);
+    printf("Trimmed: %d\n", trimmed);
+    printf("SCCs: %d, Trivial: %d\n", CC, TRIVIAL + trimmed);
 
     long seconds = end.tv_sec - start.tv_sec;
     long microseconds = end.tv_usec - start.tv_usec;
-    double elapsed = seconds + microseconds*1e-6;
+    double elapsed = seconds + microseconds * 1e-6;
     printf("Time taken: %f\n", elapsed);
 
     return 0;
+}
+
+int trimmingCSC(int **colsPointers, int **rowsIndexes, int cols, int nz)
+{
+    int i, j, k, flag;
+    int numColsRemoved = 0, newSizeCols = 0, newSizeRows = 0;
+    int *tempRows = (int *)malloc(nz * sizeof(int));
+    int *colsRemoved = (int *)calloc(cols, sizeof(int));
+    int *numElements = (int *)calloc(cols, sizeof(int));
+
+    // note columns that are going to be removed
+    for (i = 0; i < cols; i++)
+    {
+        if (colsPointers[0][i] == colsPointers[0][i + 1])
+        {
+            colsRemoved[numColsRemoved++] = i;
+            numElements[i] = -1;
+        }
+    }
+
+    int *tempCols = (int *)malloc((cols + 1 - numColsRemoved) * sizeof(int));
+
+    // note num and which elements each new column will have
+    for (i = 0; i < cols; i++)
+    {
+        for (j = colsPointers[0][i]; j < colsPointers[0][i + 1]; j++)
+        {
+            flag = 0;
+            for (k = 0; k < numColsRemoved; k++)
+            {
+                if (rowsIndexes[0][j] == colsRemoved[k])
+                    flag = 1;
+            }
+            if (flag == 0)
+            {
+                tempRows[newSizeRows++] = rowsIndexes[0][j];
+                numElements[i]++;
+            }
+        }
+    }
+
+    // make the new CSC structure on temps
+    // temp CSC_COL_INDEX
+    for (i = 0; i < cols; i++)
+    {
+        if (numElements[i] != -1)
+            tempCols[++newSizeCols] = numElements[i];
+    }
+
+    for (i = 0; i < newSizeCols; i++)
+        tempCols[i + 1] += tempCols[i];
+    tempCols[0] = 0;
+    newSizeCols++;
+
+    // fix indexes of temp CSC_ROW_INDEX
+    int indexSubstract;
+    for (i = 0; i < newSizeRows; i++)
+    {
+        indexSubstract = 0;
+        for (j = 0; j < numColsRemoved; j++)
+        {
+            if (tempRows[i] > colsRemoved[j])
+                indexSubstract++;
+        }
+        tempRows[i] -= indexSubstract;
+    }
+
+    free(colsPointers[0]);
+    colsPointers[0] = (int *)malloc(newSizeCols * sizeof(int));
+    free(rowsIndexes[0]);
+    rowsIndexes[0] = (int *)malloc(newSizeRows * sizeof(int));
+
+    for (i = 0; i < newSizeCols; i++)
+        colsPointers[0][i] = tempCols[i];
+
+    for (i = 0; i < newSizeRows; i++)
+        rowsIndexes[0][i] = tempRows[i];
+
+    free(tempRows);
+    free(tempCols);
+    return numColsRemoved;
 }
