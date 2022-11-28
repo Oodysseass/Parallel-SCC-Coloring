@@ -106,7 +106,9 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
     return SCCIDs;
 }
 
-int trimmingCSC(int **colsPointers, int **rowsIndexes, int size, int nz);
+int trimming(int **indexes, int **nonzeros, int size, int nz);
+
+void convert(int *indexA, int *nzA, int *indexB, int *nzB, int size, int nz);
 
 int main(int argc, char *argv[])
 {
@@ -169,57 +171,45 @@ int main(int argc, char *argv[])
     for (i = 0; i < cols; i++)
         CSC_COL_INDEX[i + 1] += CSC_COL_INDEX[i];
 
-    int trimmed = trimmingCSC(&CSC_COL_INDEX, &CSC_ROW_INDEX, cols, nz);
-    cols = cols - trimmed;
+    fclose(f);
+
+    int *CSR_ROW_INDEX = (int *)malloc((rows + 1) * sizeof(int));
+    int *CSR_COL_INDEX = (int *)malloc(nz * sizeof(int));
+
+    struct timeval start, end;
+    long seconds, microseconds;
+    double elapsed;
+    int trimmed = 0, removed = 0;
+
+    gettimeofday(&start, NULL);
+
+    // trim indegree zero
+    removed = trimming(&CSC_COL_INDEX, &CSC_ROW_INDEX, cols, nz);
+    trimmed += removed;
+    cols = cols - removed;
     rows = cols;
     nz = CSC_COL_INDEX[cols];
 
-    // CSR data structure
-    int *CSR_COL_INDEX = (int *)malloc(nz * sizeof(int));
-    int *CSR_ROW_INDEX = (int *)malloc((rows + 1) * sizeof(int));
-    int row, dest, temp, last = 0, cumsum = 0;
+    // trim outdegree zero
+    CSR_COL_INDEX = (int *)realloc(CSR_COL_INDEX, nz * sizeof(int));
+    convert(CSC_COL_INDEX, CSC_ROW_INDEX, CSR_ROW_INDEX, CSR_COL_INDEX, cols, nz);
 
-    for (i = 0; i < rows + 1; i++)
-    {
-        CSR_ROW_INDEX[i] = 0;
-    }
+    removed = trimming(&CSR_ROW_INDEX, &CSR_COL_INDEX, cols, nz);
+    trimmed += removed;
+    rows = rows - removed;
+    cols = rows;
+    nz = CSR_ROW_INDEX[rows];
 
-    // CONVERT CSC TO CSR
-    for (i = 0; i < nz; i++)
-        CSR_ROW_INDEX[CSC_ROW_INDEX[i]]++;
+    // remake CSC data structure
+    CSC_ROW_INDEX = (int *)realloc(CSC_ROW_INDEX, nz * sizeof(int));
+    convert(CSR_ROW_INDEX, CSR_COL_INDEX, CSC_COL_INDEX, CSC_ROW_INDEX, rows, nz);
+    gettimeofday(&end, NULL);
 
-    for (i = 0; i < rows; i++)
-    {
-        temp = CSR_ROW_INDEX[i];
-        CSR_ROW_INDEX[i] = cumsum;
-        cumsum += temp;
-    }
-    CSR_ROW_INDEX[rows] = nz;
-
-    for (i = 0; i < cols; i++)
-    {
-        for (j = CSC_COL_INDEX[i]; j < CSC_COL_INDEX[i + 1]; j++)
-        {
-            row = CSC_ROW_INDEX[j];
-            dest = CSR_ROW_INDEX[row];
-
-            CSR_COL_INDEX[dest] = i;
-
-            CSR_ROW_INDEX[row]++;
-        }
-    }
-
-    for (i = 0; i < rows + 1; i++)
-    {
-        temp = CSR_ROW_INDEX[i];
-        CSR_ROW_INDEX[i] = last;
-        last = temp;
-    }
-
-    fclose(f);
-
-    struct timeval start, end;
-
+    seconds = end.tv_sec - start.tv_sec;
+    microseconds = end.tv_usec - start.tv_usec;
+    elapsed = seconds + microseconds * 1e-6;
+    printf("Time taken for trimming: %f\n", elapsed);
+ 
     gettimeofday(&start, NULL);
     int *SCCIDs = coloringSCC(CSR_ROW_INDEX, CSR_COL_INDEX, CSC_ROW_INDEX, CSC_COL_INDEX, rows);
     gettimeofday(&end, NULL);
@@ -237,94 +227,141 @@ int main(int argc, char *argv[])
             CC++;
     }
 
-    printf("Trimmed: %d\n", trimmed);
     printf("SCCs: %d, Trivial: %d\n", CC, TRIVIAL + trimmed);
 
-    long seconds = end.tv_sec - start.tv_sec;
-    long microseconds = end.tv_usec - start.tv_usec;
-    double elapsed = seconds + microseconds * 1e-6;
+    seconds = end.tv_sec - start.tv_sec;
+    microseconds = end.tv_usec - start.tv_usec;
+    elapsed = seconds + microseconds * 1e-6;
     printf("Time taken: %f\n", elapsed);
 
     return 0;
 }
 
-int trimmingCSC(int **colsPointers, int **rowsIndexes, int cols, int nz)
+// converts CSC/CSR(A) to CSR/CSC(B)
+void convert(int *indexA, int *nzA, int *indexB, int *nzB, int size, int nz)
 {
-    int i, j, k, flag;
-    int numColsRemoved = 0, newSizeCols = 0, newSizeRows = 0;
-    int *tempRows = (int *)malloc(nz * sizeof(int));
-    int *colsRemoved = (int *)calloc(cols, sizeof(int));
-    int *numElements = (int *)calloc(cols, sizeof(int));
+    int i, j, row, dest, temp, last = 0, cumsum = 0;
 
-    // note columns that are going to be removed
-    for (i = 0; i < cols; i++)
+    for (i = 0; i < size + 1; i++)
+        indexB[i] = 0;
+
+    for (i = 0; i < nz; i++)
+        indexB[nzA[i]]++;
+
+    for (i = 0; i < size; i++)
     {
-        if (colsPointers[0][i] == colsPointers[0][i + 1])
+        temp = indexB[i];
+        indexB[i] = cumsum;
+        cumsum += temp;
+    }
+    indexB[size] = nz;
+
+    for (i = 0; i < size; i++)
+    {
+        for (j = indexA[i]; j < indexA[i + 1]; j++)
         {
-            colsRemoved[numColsRemoved++] = i;
-            numElements[i] = -1;
+            row = nzA[j];
+            dest = indexB[row];
+
+            nzB[dest] = i;
+
+            indexB[row]++;
         }
     }
 
-    int *tempCols = (int *)malloc((cols + 1 - numColsRemoved) * sizeof(int));
-
-    // note num and which elements each new column will have
-    for (i = 0; i < cols; i++)
+    for (i = 0; i < size + 1; i++)
     {
-        for (j = colsPointers[0][i]; j < colsPointers[0][i + 1]; j++)
+        temp = indexB[i];
+        indexB[i] = last;
+        last = temp;
+    }
+}
+
+int trimming(int **indexes, int **nonZeros, int size, int nz)
+{
+    int *numEdges = (int *)malloc(size * sizeof(int));
+    int *tempIndexes = (int *)malloc((size + 1) * sizeof(int)); // plus 1 because of the size = cols and not actual size of indexes[0]
+    int newNZ = 0;
+    int newSize = 0;
+    int i, j;
+
+    // find number of edges of each vertice, if it is zero make it -1
+    // that is because we want to remove only vertices that had from start 0 in/outdegree
+    // and not because of the trimming
+    for (i = 0; i < size; i++)
+    {
+        if (indexes[0][i] != indexes[0][i + 1])
+            numEdges[i] = indexes[0][i + 1] - indexes[0][i];
+        else
+            numEdges[i] = -1;
+    }
+
+    // erase edges from/to zero in/outdegree vertices
+    for (i = 0; i < size; i++)
+    {
+        for (j = indexes[0][i]; j < indexes[0][i + 1]; j++)
         {
-            flag = 0;
-            for (k = 0; k < numColsRemoved; k++)
+            if (numEdges[nonZeros[0][j]] == -1)
             {
-                if (rowsIndexes[0][j] == colsRemoved[k])
-                    flag = 1;
-            }
-            if (flag == 0)
-            {
-                tempRows[newSizeRows++] = rowsIndexes[0][j];
-                numElements[i]++;
+                nonZeros[0][j] = -1;
+                numEdges[i]--;
             }
         }
     }
 
-    // make the new CSC structure on temps
-    // temp CSC_COL_INDEX
-    for (i = 0; i < cols; i++)
+    // fix new num of edges of each vertice
+    indexes[0][0] = 0;
+    for (i = 0; i < size; i++)
     {
-        if (numElements[i] != -1)
-            tempCols[++newSizeCols] = numElements[i];
+        if (numEdges[i] != -1)
+            indexes[0][i + 1] = indexes[0][i] + numEdges[i];
+        else
+            indexes[0][i + 1] = indexes[0][i];
     }
 
-    for (i = 0; i < newSizeCols; i++)
-        tempCols[i + 1] += tempCols[i];
-    tempCols[0] = 0;
-    newSizeCols++;
-
-    // fix indexes of temp CSC_ROW_INDEX
-    int indexSubstract;
-    for (i = 0; i < newSizeRows; i++)
+    // remove vertices with zero in/outdegree
+    for (i = 0; i < size; i++)
     {
-        indexSubstract = 0;
-        for (j = 0; j < numColsRemoved; j++)
-        {
-            if (tempRows[i] > colsRemoved[j])
-                indexSubstract++;
-        }
-        tempRows[i] -= indexSubstract;
+        if (numEdges[i] != -1)
+            tempIndexes[newSize++] = indexes[0][i];
+    }
+    tempIndexes[newSize++] = indexes[0][size];
+
+    // keep edges that are only from non-zero in/outdegree vertices
+    int *tempNonzeros = (int *)malloc(indexes[0][size] * sizeof(int));
+    for (i = 0; i < nz; i++)
+    {
+        if (nonZeros[0][i] != -1)
+            tempNonzeros[newNZ++] = nonZeros[0][i];
     }
 
-    free(colsPointers[0]);
-    colsPointers[0] = (int *)malloc(newSizeCols * sizeof(int));
-    free(rowsIndexes[0]);
-    rowsIndexes[0] = (int *)malloc(newSizeRows * sizeof(int));
+    // we have to fix the nonZeros array because of the vertices we removed
+    int removed = 0;
+    for (i = 0; i < size; i++)
+    {
+        if (numEdges[i] != -1)
+            numEdges[i] = removed;
+        else
+            removed++;
+    }
 
-    for (i = 0; i < newSizeCols; i++)
-        colsPointers[0][i] = tempCols[i];
+    for (i = 0; i < newNZ; i++)
+    {
+        tempNonzeros[i] -= numEdges[tempNonzeros[i]];
+    }
 
-    for (i = 0; i < newSizeRows; i++)
-        rowsIndexes[0][i] = tempRows[i];
+    // transfer new structure to arguments
+    indexes[0] = (int *)realloc(indexes[0], newSize * sizeof(int));
+    nonZeros[0] = (int *)realloc(nonZeros[0], newNZ * sizeof(int));
 
-    free(tempRows);
-    free(tempCols);
-    return numColsRemoved;
+    for (i = 0; i < newSize; i++)
+        indexes[0][i] = tempIndexes[i];
+
+    for (i = 0; i < newNZ; i++)
+        nonZeros[0][i] = tempNonzeros[i];
+
+    free(tempIndexes);
+    free(tempNonzeros);
+    free(numEdges);
+    return (size + 1 - newSize);
 }
