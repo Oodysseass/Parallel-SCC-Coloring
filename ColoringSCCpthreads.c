@@ -14,6 +14,7 @@ typedef struct
     int *colors;
     int u;
     int *colorChanges;
+    int *done;
 } ColorArgs;
 
 typedef struct
@@ -25,6 +26,7 @@ typedef struct
     int numVertices;
     int *vertices;
     int *SSCIDs;
+    int *done;
 } BFSArgs;
 
 void *BFS(void *arguments)
@@ -74,6 +76,8 @@ void *propagateColors(void *arguments)
             args->colorChanges[0] = 1;
         }
     }
+
+    args->done[0] = 1;
 }
 
 int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomingEdges, int *colsIncomingEdges, int numVertices)
@@ -87,6 +91,7 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
     int *openThreads = (int *)calloc(p, sizeof(int));
     ColorArgs *colorArgs = (ColorArgs *)malloc(p * sizeof(ColorArgs));
     BFSArgs *bfsArgs = (BFSArgs *)malloc(p * sizeof(BFSArgs));
+    int *colorChanges = (int *)calloc(p, sizeof(int));
 
     int verticesRemaining = numVertices;
     int i, j;
@@ -94,6 +99,12 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
 
     for (i = 0; i < numVertices; i++)
         vertices[i] = i + 1;
+
+    for (i = 0; i < p; i++)
+    {
+        colorArgs[i].done = (int *)malloc(sizeof(int));
+        bfsArgs[i].done = (int *)malloc(sizeof(int));
+    }
 
     while (verticesRemaining != 0)
     {
@@ -104,7 +115,6 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
 
         do
         {
-            int *colorChanges = (int *)calloc(p, sizeof(int));
             colorChange = 0;
             i = 0;
 
@@ -112,10 +122,15 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
             {
                 for (j = 0; j < p; j++)
                 {
-                    while (vertices[i] == 0 && i < numVertices)
+                    while (i < numVertices && vertices[i] == 0)
                         i++;
                     if (i == numVertices)
                         break;
+
+                    if (openThreads[j] == 1 && colorArgs[j].done[0] == 1)
+                        pthread_join(threads[j], NULL);
+                    else if (openThreads[j] == 1 && colorArgs[j].done[0] == 0)
+                        continue;
 
                     colorArgs[j].vertices = vertices;
                     colorArgs[j].rowsOutgoingEdges = rowsOutgoingEdges;
@@ -123,40 +138,41 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
                     colorArgs[j].colors = colors;
                     colorArgs[j].u = i;
                     colorArgs[j].colorChanges = &colorChanges[j];
+                    colorArgs[j].done[0] = 0;
                     pthread_create(&threads[j], NULL, propagateColors, (void *)&colorArgs[j]);
                     openThreads[j] = 1;
-
                     i++;
                 }
-                for (j = 0; j < p; j++)
-                {
-                    if (openThreads[j] == 1)
-                    {
-                        pthread_join(threads[j], NULL);
-                        openThreads[j] = 0;
-                    }
-                }
+            }
+
+            for (j = 0; j < p; j++)
+            {
+                if (openThreads[j] == 1)
+                    pthread_join(threads[j], NULL);
             }
 
             for (i = 0; i < p; i++)
             {
                 if (colorChanges[i] == 1)
-                {
                     colorChange = 1;
-                    break;
-                }
+                colorChanges[i] = 0;
             }
-            free(colorChanges);
         } while (colorChange);
 
         while (i < numVertices)
         {
             for (j = 0; j < p; j++)
             {
-                while (colors[i] != i + 1 && i < numVertices)
+                while (i < numVertices && colors[i] != i + 1)
                     i++;
                 if (i == numVertices)
                     break;
+
+                if (openThreads[j] == 1 && colorArgs[j].done[0] == 1)
+                    if (pthread_join(threads[j], (void **)&verticesRemoved) == 0)
+                        verticesRemaining = verticesRemaining - *verticesRemoved;
+                else if (openThreads[j] == 1 && colorArgs[j].done[0] == 0)
+                    continue;
 
                 bfsArgs[j].colors = colors;
                 bfsArgs[j].rowsIncomingEdges = rowsIncomingEdges;
@@ -165,18 +181,20 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
                 bfsArgs[j].numVertices = numVertices;
                 bfsArgs[j].vertices = vertices;
                 bfsArgs[j].SSCIDs = SCCIDs;
+                bfsArgs[j].done[0] = 0;
                 pthread_create(&threads[j], NULL, BFS, (void *)&bfsArgs[j]);
-
+                openThreads[j] = 1;
                 i++;
             }
+        }
 
-            for (j = 0; j < p; j++)
-            {
-                if (pthread_join(threads[j], (void **)&verticesRemoved) == 0)
-                    verticesRemaining = verticesRemaining - *verticesRemoved;
-            }
+        for (j = 0; j < p; j++)
+        {
+            if (openThreads[j] == 1 && pthread_join(threads[j], (void **)&verticesRemoved) == 0)
+                verticesRemaining = verticesRemaining - *verticesRemoved;
         }
     }
+
     return SCCIDs;
 }
 
