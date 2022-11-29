@@ -61,7 +61,7 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
         do
         {
             colorChange = 0;
-            #pragma omp parallel for reduction (+:colorChange)
+            #pragma omp parallel for
             for(j = 0; j < numVertices; j++)
             {
                 if (vertices[j] == 0) // if vertices[j] == 0, vertice with id = j + 1 has been removed
