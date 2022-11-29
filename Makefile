@@ -6,8 +6,8 @@
 # run any executable with an mtx file as argument
 # to imitate results
 
-CC = @gcc
-CLANG = @/opt/opencilk/bin/clang
+CC = gcc
+CLANG = /opt/opencilk/bin/clang
 GFLAGS = -O3 -w
 CFLAGS = -fopencilk $(GFLAGS)
 MPFLAGS = -fopenmp $(GFLAGS)
