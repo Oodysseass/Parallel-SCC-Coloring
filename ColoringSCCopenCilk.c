@@ -138,6 +138,7 @@ int main(int argc, char *argv[])
     if ((ret_code = mm_read_mtx_crd_size(f, &rows, &cols, &nz)) != 0)
         exit(1);
 
+    printf("--OPENCILK--\n");
     printf("Rows: %d\nColumns: %d\nNon-zero: %d\n", rows, cols, nz);
 
     // CSC data structure
