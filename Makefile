@@ -28,10 +28,10 @@ $(OBJSEQ) : ColoringSCCSequential.c $(DEPS)
 	$(CC) -c -o $@ $< $(GFLAGS)
 
 $(OBJMP) : ColoringSCCopenMP.c $(DEPS)
-	$(CC) -c -o $@ $< $(GFLAGS)
+	$(CC) -c -o $@ $< $(MPFLAGS)
 
 $(OBJP) : ColoringSCCpthreads.c $(DEPS)
-	$(CC) -c -o $@ $< $(GFLAGS)
+	$(CC) -c -o $@ $< $(PFLAGS)
 
 $(OBJC) : ColoringSCCopenCilk.c $(DEPS)
 	$(CLANG) -c -o $@ $< $(CFLAGS)
