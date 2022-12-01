@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include "mmio.h"
 
-int p = 4;
+int p = 16;
 
 typedef struct
 {
@@ -32,7 +32,7 @@ typedef struct
 void *BFS(void *arguments)
 {
     BFSArgs *args = (BFSArgs *)arguments;
-    int i = -1, j, size = 0;
+    int i = -1, j;
     int *queue = (int *)calloc(args->numVertices, sizeof(int));
     int *visited = (int *)calloc(args->numVertices, sizeof(int));
     int v;
@@ -44,7 +44,6 @@ void *BFS(void *arguments)
         v = queue[i--];
         args->vertices[v] = 0;
         args->SSCIDs[v] = args->u + 1;
-        size++;
         for (j = args->colsIncomingEdges[v]; j < args->colsIncomingEdges[v + 1]; j++)
         {
             if (args->colors[args->rowsIncomingEdges[j]] == args->u + 1 && visited[args->rowsIncomingEdges[j]] != 1)
@@ -57,11 +56,6 @@ void *BFS(void *arguments)
 
     free(queue);
     free(visited);
-
-    int *result = (int *)malloc(sizeof(int));
-    *result = size;
-
-    return (void *)result;
 }
 
 void *propagateColors(void *arguments)
@@ -84,21 +78,26 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
 {
     int *colors = (int *)malloc(numVertices * sizeof(int));
     int *vertices = (int *)malloc(numVertices * sizeof(int));
+    int *verticesRemaining = (int *)malloc(numVertices * sizeof(int));
     int *SCCIDs = (int *)calloc(numVertices, sizeof(int));
+    int *uniqueColors = (int *)malloc(numVertices * sizeof(int));
 
-    int *verticesRemoved;
     pthread_t *threads = (pthread_t *)malloc(p * sizeof(pthread_t));
     int *openThreads = (int *)calloc(p, sizeof(int));
     ColorArgs *colorArgs = (ColorArgs *)malloc(p * sizeof(ColorArgs));
     BFSArgs *bfsArgs = (BFSArgs *)malloc(p * sizeof(BFSArgs));
     int *colorChanges = (int *)calloc(p, sizeof(int));
 
-    int verticesRemaining = numVertices;
+    int numUnique;
+    int numVerticesRemaining = numVertices;
     int i, j;
     int colorChange;
 
     for (i = 0; i < numVertices; i++)
+    {
         vertices[i] = i + 1;
+        verticesRemaining[i] = i + 1;
+    }
 
     for (i = 0; i < p; i++)
     {
@@ -106,50 +105,46 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
         bfsArgs[i].done = (int *)malloc(sizeof(int));
     }
 
-    while (verticesRemaining != 0)
+    while (numVerticesRemaining != 0)
     {
         for (i = 0; i < numVertices; i++)
         {
             colors[i] = vertices[i];
         }
-
         do
         {
             colorChange = 0;
             i = 0;
-
-            while (i < numVertices)
+            j = 0;
+            while (i < numVerticesRemaining)
             {
-                for (j = 0; j < p; j++)
+                if (openThreads[j] == 1 && colorArgs[j].done[0] == 1)
+                    pthread_join(threads[j], NULL);
+                else if (openThreads[j] == 1 && colorArgs[j].done[0] == 0)
                 {
-                    while (i < numVertices && vertices[i] == 0)
-                        i++;
-                    if (i == numVertices)
-                        break;
-
-                    if (openThreads[j] == 1 && colorArgs[j].done[0] == 1)
-                        pthread_join(threads[j], NULL);
-                    else if (openThreads[j] == 1 && colorArgs[j].done[0] == 0)
-                        continue;
-
-                    colorArgs[j].vertices = vertices;
-                    colorArgs[j].rowsOutgoingEdges = rowsOutgoingEdges;
-                    colorArgs[j].colsOutgoingEdges = colsOutgoingEdges;
-                    colorArgs[j].colors = colors;
-                    colorArgs[j].u = i;
-                    colorArgs[j].colorChanges = &colorChanges[j];
-                    colorArgs[j].done[0] = 0;
-                    pthread_create(&threads[j], NULL, propagateColors, (void *)&colorArgs[j]);
-                    openThreads[j] = 1;
-                    i++;
+                    j = (j + 1) % p;
+                    continue;
                 }
+
+                colorArgs[j].vertices = verticesRemaining;
+                colorArgs[j].rowsOutgoingEdges = rowsOutgoingEdges;
+                colorArgs[j].colsOutgoingEdges = colsOutgoingEdges;
+                colorArgs[j].colors = colors;
+                colorArgs[j].u = verticesRemaining[i] - 1;
+                colorArgs[j].colorChanges = &colorChanges[j];
+                colorArgs[j].done[0] = 0;
+                pthread_create(&threads[j], NULL, propagateColors, (void *)&colorArgs[j]);
+                openThreads[j] = 1;
+                i++;
+                j = (j + 1) % p;
             }
 
             for (j = 0; j < p; j++)
-            {
                 if (openThreads[j] == 1)
+                {
                     pthread_join(threads[j], NULL);
-            }
+                    openThreads[j] = 0;
+                }
 
             for (i = 0; i < p; i++)
             {
@@ -159,42 +154,59 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
             }
         } while (colorChange);
 
-        while (i < numVertices)
+        numUnique = 0;
+        for (i = 0; i < numVertices; i++)
+            if (colors[i] == i + 1)
+                uniqueColors[numUnique++] = i;
+
+        i = 0;
+        j = 0;
+        while (i < numUnique)
         {
-            for (j = 0; j < p; j++)
+            if (openThreads[j] == 1 && colorArgs[j].done[0] == 1)
+                pthread_join(threads[j], NULL);
+            else if (openThreads[j] == 1 && colorArgs[j].done[0] == 0)
             {
-                while (i < numVertices && colors[i] != i + 1)
-                    i++;
-                if (i == numVertices)
-                    break;
-
-                if (openThreads[j] == 1 && colorArgs[j].done[0] == 1)
-                    if (pthread_join(threads[j], (void **)&verticesRemoved) == 0)
-                        verticesRemaining = verticesRemaining - *verticesRemoved;
-                else if (openThreads[j] == 1 && colorArgs[j].done[0] == 0)
-                    continue;
-
-                bfsArgs[j].colors = colors;
-                bfsArgs[j].rowsIncomingEdges = rowsIncomingEdges;
-                bfsArgs[j].colsIncomingEdges = colsIncomingEdges;
-                bfsArgs[j].u = i;
-                bfsArgs[j].numVertices = numVertices;
-                bfsArgs[j].vertices = vertices;
-                bfsArgs[j].SSCIDs = SCCIDs;
-                bfsArgs[j].done[0] = 0;
-                pthread_create(&threads[j], NULL, BFS, (void *)&bfsArgs[j]);
-                openThreads[j] = 1;
-                i++;
+                j = (j + 1) % p;
+                continue;
             }
+
+            bfsArgs[j].colors = colors;
+            bfsArgs[j].rowsIncomingEdges = rowsIncomingEdges;
+            bfsArgs[j].colsIncomingEdges = colsIncomingEdges;
+            bfsArgs[j].u = uniqueColors[i];
+            bfsArgs[j].numVertices = numVertices;
+            bfsArgs[j].vertices = vertices;
+            bfsArgs[j].SSCIDs = SCCIDs;
+            bfsArgs[j].done[0] = 0;
+            pthread_create(&threads[j], NULL, BFS, (void *)&bfsArgs[j]);
+            openThreads[j] = 1;
+            i++;
+            j = (j + 1) % p;
         }
 
         for (j = 0; j < p; j++)
-        {
-            if (openThreads[j] == 1 && pthread_join(threads[j], (void **)&verticesRemoved) == 0)
-                verticesRemaining = verticesRemaining - *verticesRemoved;
-        }
+            if (openThreads[j] == 1)
+            {
+                pthread_join(threads[j], NULL);
+                openThreads[j] = 0;
+            }
+
+        numVerticesRemaining = 0;
+        for (i = 1; i < numVertices; i++)
+            if (vertices[i] != 0)
+                verticesRemaining[numVerticesRemaining++] = vertices[i];
     }
 
+    free(colors);
+    free(vertices);
+    free(verticesRemaining);
+    free(uniqueColors);
+    free(threads);
+    free(openThreads);
+    free(colorArgs);
+    free(bfsArgs);
+    free(colorChanges);
     return SCCIDs;
 }
 
@@ -302,7 +314,7 @@ int main(int argc, char *argv[])
     microseconds = end.tv_usec - start.tv_usec;
     elapsed = seconds + microseconds * 1e-6;
     printf("Time taken for trimming: %f\n", elapsed);
- 
+
     gettimeofday(&start, NULL);
     int *SCCIDs = coloringSCC(CSR_ROW_INDEX, CSR_COL_INDEX, CSC_ROW_INDEX, CSC_COL_INDEX, rows);
     gettimeofday(&end, NULL);

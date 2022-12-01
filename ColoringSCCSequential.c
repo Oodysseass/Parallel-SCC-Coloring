@@ -3,9 +3,9 @@
 #include <sys/time.h>
 #include "mmio.h"
 
-int BFS(int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int numVertices, int *vertices, int *SSCIDs)
+void BFS(int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int numVertices, int *vertices, int *SSCIDs)
 {
-    int i = -1, j, size = 0;
+    int i = -1, j;
     int *queue = (int *)calloc(numVertices, sizeof(int));
     int *visited = (int *)calloc(numVertices, sizeof(int));
     int v;
@@ -17,7 +17,6 @@ int BFS(int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int 
         v = queue[i--];
         vertices[v] = 0;
         SSCIDs[v] = u + 1;
-        size++;
         for (j = colsIncomingEdges[v]; j < colsIncomingEdges[v + 1]; j++)
         {
             if (colors[rowsIncomingEdges[j]] == u + 1 && visited[rowsIncomingEdges[j]] != 1)
@@ -30,8 +29,6 @@ int BFS(int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int 
 
     free(queue);
     free(visited);
-
-    return size;
 }
 
 // coloring algorithm
@@ -39,16 +36,22 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
 {
     int *colors = (int *)malloc(numVertices * sizeof(int));
     int *vertices = (int *)malloc(numVertices * sizeof(int));
+    int *verticesRemaining = (int *)malloc(numVertices * sizeof(int));
     int *SCCIDs = (int *)malloc(numVertices * sizeof(int));
+    int *uniqueColors = (int *)malloc(numVertices * sizeof(int));
 
-    int verticesRemaining = numVertices;
+    int numUnique;
+    int numVerticesRemaining = numVertices;
     int colorChange;
-    int i, j, size;
+    int i, j;
 
     for (i = 0; i < numVertices; i++)
+    {
         vertices[i] = i + 1;
+        verticesRemaining[i] = i + 1;
+    }
 
-    while (verticesRemaining != 0)
+    while (numVerticesRemaining != 0)
     {
         for (i = 0; i < numVertices; i++)
         {
@@ -58,32 +61,37 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
         do
         {
             colorChange = 0;
-            for (i = 0; i < numVertices; i++)
+            for (i = 0; i < numVerticesRemaining; i++)
             {
-                if (vertices[i] == 0) // if vertices[i] == 0, vertice with id = i + 1 has been removed
-                    continue;
-                for (j = rowsOutgoingEdges[i]; j < rowsOutgoingEdges[i + 1]; j++)
+                for (j = rowsOutgoingEdges[verticesRemaining[i] - 1]; j < rowsOutgoingEdges[verticesRemaining[i]]; j++)
                 {
-                    if (colors[i] > colors[colsOutgoingEdges[j]] && vertices[colsOutgoingEdges[j]] != 0)
+                    if (colors[verticesRemaining[i] - 1] > colors[colsOutgoingEdges[j]] && vertices[colsOutgoingEdges[j]] != 0)
                     {
-                        colors[colsOutgoingEdges[j]] = colors[i];
+                        colors[colsOutgoingEdges[j]] = colors[verticesRemaining[i] - 1];
                         colorChange = 1;
                     }
                 }
             }
         } while (colorChange);
 
+        numUnique = 0;
         for (i = 0; i < numVertices; i++)
-        {
-            // check only vertices that kept their original color
-            if (colors[i] != i + 1)
-                continue;
+            if (colors[i] == i + 1)
+                uniqueColors[numUnique++] = i;
 
-            int size = BFS(colors, rowsIncomingEdges, colsIncomingEdges, i, numVertices, vertices, SCCIDs);
-            verticesRemaining -= size;
-        }
+        for (i = 0; i < numUnique; i++)
+            BFS(colors, rowsIncomingEdges, colsIncomingEdges, uniqueColors[i], numVertices, vertices, SCCIDs);
+
+        numVerticesRemaining = 0;
+        for (i = 1; i < numVertices; i++)
+            if (vertices[i] != 0)
+                verticesRemaining[numVerticesRemaining++] = vertices[i];
     }
 
+    free(colors);
+    free(vertices);
+    free(verticesRemaining);
+    free(uniqueColors);
     return SCCIDs;
 }
 
@@ -191,7 +199,7 @@ int main(int argc, char *argv[])
     microseconds = end.tv_usec - start.tv_usec;
     elapsed = seconds + microseconds * 1e-6;
     printf("Time taken for trimming: %f\n", elapsed);
- 
+
     gettimeofday(&start, NULL);
     int *SCCIDs = coloringSCC(CSR_ROW_INDEX, CSR_COL_INDEX, CSC_ROW_INDEX, CSC_COL_INDEX, rows);
     gettimeofday(&end, NULL);

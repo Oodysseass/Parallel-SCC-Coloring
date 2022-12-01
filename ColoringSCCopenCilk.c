@@ -4,9 +4,9 @@
 #include <cilk/cilk.h>
 #include "mmio.h"
 
-int BFS(int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int numVertices, int *vertices, int *SSCIDs)
+void BFS(int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int numVertices, int *vertices, int *SSCIDs)
 {
-    int i = -1, j, size = 0;
+    int i = -1, j;
     int *queue = (int *)calloc(numVertices, sizeof(int));
     int *visited = (int *)calloc(numVertices, sizeof(int));
     int v;
@@ -18,7 +18,6 @@ int BFS(int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int 
         v = queue[i--];
         vertices[v] = 0;
         SSCIDs[v] = u + 1;
-        size++;
         for (j = colsIncomingEdges[v]; j < colsIncomingEdges[v + 1]; j++)
         {
             if (colors[rowsIncomingEdges[j]] == u + 1 && visited[rowsIncomingEdges[j]] != 1)
@@ -31,25 +30,28 @@ int BFS(int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int 
 
     free(queue);
     free(visited);
-
-    return size;
 }
 
 int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomingEdges, int *colsIncomingEdges, int numVertices)
 {
     int *colors = (int *)malloc(numVertices * sizeof(int));
     int *vertices = (int *)malloc(numVertices * sizeof(int));
+    int *verticesRemaining = (int *)malloc(numVertices * sizeof(int));
     int *SCCIDs = (int *)calloc(numVertices, sizeof(int));
-    int *verticesRemoved = (int *)calloc(numVertices, sizeof(int));
+    int *uniqueColors = (int *)malloc(numVertices * sizeof(int));
 
-    int verticesRemaining = numVertices;
+    int numUnique;
+    int numVerticesRemaining = numVertices;
     int i;
     int colorChange;
 
     for (i = 0; i < numVertices; i++)
+    {
         vertices[i] = i + 1;
+        verticesRemaining[i] = i + 1;
+    }
 
-    while (verticesRemaining != 0)
+    while (numVerticesRemaining != 0)
     {
         for (i = 0; i < numVertices; i++)
         {
@@ -60,20 +62,18 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
         {
             int *colorChanges = (int *)calloc(numVertices, sizeof(int));
             colorChange = 0;
-            cilk_for(int j = 0; j < numVertices; j++)
+            cilk_for(int j = 0; j < numVerticesRemaining; j++)
             {
-                if (vertices[j] == 0) // if vertices[j] == 0, vertice with id = j + 1 has been removed
-                    continue;
-
-                for (int k = rowsOutgoingEdges[j]; k < rowsOutgoingEdges[j + 1]; k++)
+                for (int k = rowsOutgoingEdges[verticesRemaining[j] - 1]; k < rowsOutgoingEdges[verticesRemaining[j]]; k++)
                 {
-                    if (colors[j] > colors[colsOutgoingEdges[k]] && vertices[colsOutgoingEdges[k]] != 0)
+                    if (colors[verticesRemaining[j] - 1] > colors[colsOutgoingEdges[k]] && vertices[colsOutgoingEdges[k]] != 0)
                     {
-                        colors[colsOutgoingEdges[k]] = colors[j];
+                        colors[colsOutgoingEdges[k]] = colors[verticesRemaining[j] - 1];
                         colorChanges[j] = 1;
                     }
                 }
             }
+
             for (i = 0; i < numVertices; i++)
             {
                 if (colorChanges[i] == 1)
@@ -85,24 +85,24 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
             free(colorChanges);
         } while (colorChange);
 
-        cilk_for(int j = 0; j < numVertices; j++)
-        {
-            // check only vertices that kept their original color
-            if (colors[j] != j + 1)
-                continue;
-
-            int size = BFS(colors, rowsIncomingEdges, colsIncomingEdges, j, numVertices, vertices, SCCIDs);
-            verticesRemoved[j] += size;
-        }
+        numUnique = 0;
         for (i = 0; i < numVertices; i++)
-        {
-            verticesRemaining -= verticesRemoved[i];
-            verticesRemoved[i] = 0;
-            if (verticesRemaining == 0)
-                break;
-        }
+            if (colors[i] == i + 1)
+                uniqueColors[numUnique++] = i;
+
+        cilk_for(int j = 0; j < numUnique; j++)
+            BFS(colors, rowsIncomingEdges, colsIncomingEdges, uniqueColors[j], numVertices, vertices, SCCIDs);
+
+        numVerticesRemaining = 0;
+        for (i = 1; i < numVertices; i++)
+            if (vertices[i] != 0)
+                verticesRemaining[numVerticesRemaining++] = vertices[i];
     }
 
+    free(colors);
+    free(vertices);
+    free(verticesRemaining);
+    free(uniqueColors);
     return SCCIDs;
 }
 
