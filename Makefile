@@ -8,7 +8,7 @@
 
 CC = gcc
 CLANG = /opt/opencilk/bin/clang
-GFLAGS = -O3 -w
+GFLAGS = -O3 -w -g
 CFLAGS = -fopencilk $(GFLAGS)
 MPFLAGS = -fopenmp $(GFLAGS)
 PFLAGS = -pthread $(GFLAGS)
