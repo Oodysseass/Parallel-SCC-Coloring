@@ -6,7 +6,7 @@
 
 int p = 16;
 
-int BFS(int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int numVertices, int *vertices, int *SSCIDs)
+void BFS(int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int numVertices, int *vertices, int *SSCIDs)
 {
     int i = -1, j, size = 0;
     int *queue = (int *)calloc(numVertices, sizeof(int));
@@ -20,7 +20,6 @@ int BFS(int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int 
         v = queue[i--];
         vertices[v] = 0;
         SSCIDs[v] = u + 1;
-        size++;
         for (j = colsIncomingEdges[v]; j < colsIncomingEdges[v + 1]; j++)
         {
             if (colors[rowsIncomingEdges[j]] == u + 1 && visited[rowsIncomingEdges[j]] != 1)
@@ -33,25 +32,29 @@ int BFS(int *colors, int *rowsIncomingEdges, int *colsIncomingEdges, int u, int 
 
     free(queue);
     free(visited);
-
-    return size;
 }
 
 int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomingEdges, int *colsIncomingEdges, int numVertices)
 {
     int *colors = (int *)malloc(numVertices * sizeof(int));
     int *vertices = (int *)malloc(numVertices * sizeof(int));
+    int *verticesRemaining = (int *)malloc(numVertices * sizeof(int));
     int *SCCIDs = (int *)calloc(numVertices, sizeof(int));
-    omp_set_num_threads(p);
+    int *uniqueColors = (int *)malloc(numVertices * sizeof(int));
 
-    int verticesRemaining = numVertices;
+    int numUnique;
+    int numVerticesRemaining = numVertices;
     int i, j;
     int colorChange;
 
     for (i = 0; i < numVertices; i++)
+    {
         vertices[i] = i + 1;
+        verticesRemaining[i] = i + 1;
+    }
 
-    while (verticesRemaining != 0)
+    omp_set_num_threads(p);
+    while (numVerticesRemaining != 0)
     {
         for (i = 0; i < numVertices; i++)
         {
@@ -61,40 +64,39 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
         do
         {
             colorChange = 0;
-            #pragma omp parallel for reduction (+:colorChange)
-            for(j = 0; j < numVertices; j++)
+            #pragma omp parallel for
+            for(j = 0; j < numVerticesRemaining; j++)
             {
-                if (vertices[j] == 0) // if vertices[j] == 0, vertice with id = j + 1 has been removed
-                    continue;
-
-                for (int k = rowsOutgoingEdges[j]; k < rowsOutgoingEdges[j + 1]; k++)
+                for (int k = rowsOutgoingEdges[verticesRemaining[j] - 1]; k < rowsOutgoingEdges[verticesRemaining[j]]; k++)
                 {
-                    if (colors[j] > colors[colsOutgoingEdges[k]] && vertices[colsOutgoingEdges[k]] != 0)
+                    if (colors[verticesRemaining[j] - 1] > colors[colsOutgoingEdges[k]] && vertices[colsOutgoingEdges[k]] != 0)
                     {
-                        colors[colsOutgoingEdges[k]] = colors[j];
+                        colors[colsOutgoingEdges[k]] = colors[verticesRemaining[j] - 1];
                         colorChange = 1;
                     }
                 }
             }
         } while (colorChange);
 
-        #pragma omp parallel for reduction(+:verticesRemaining)
-        for(j = 0; j < numVertices; j++)
-        {
-            // check only vertices that kept their original color
-            if (colors[j] != j + 1)
-                continue;
+        numUnique = 0;
+        for (i = 0; i < numVertices; i++)
+            if (colors[i] == i + 1)
+                uniqueColors[numUnique++] = i;
 
-            int id = omp_get_thread_num();
-            int size = BFS(colors, rowsIncomingEdges, colsIncomingEdges, j, numVertices, vertices, SCCIDs);
-            verticesRemaining -= size;
-        }
+        #pragma omp parallel for
+        for(j = 0; j < numUnique; j++)
+            BFS(colors, rowsIncomingEdges, colsIncomingEdges, uniqueColors[j], numVertices, vertices, SCCIDs);
+
+        numVerticesRemaining = 0;
+        for (i = 1; i < numVertices; i++)
+            if (vertices[i] != 0)
+                verticesRemaining[numVerticesRemaining++] = vertices[i];
     }
 
     free(colors);
     free(vertices);
-
-
+    free(verticesRemaining);
+    free(uniqueColors);
     return SCCIDs;
 }
 
