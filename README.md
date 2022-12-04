@@ -8,4 +8,4 @@ There are three implementations of parallelism: one with openCilk, one with open
 Clang compiler of the OpenCilk is required for the openCilk version which can be found here: https://www.opencilk.org/doc/users-guide/install/
 Other implementations can be used with an up-to-date gcc compiler with -fopenmp and -pthread flags accordingly.
 
-Make sure to have an .mtx file from SuiteSparse Matrix Collection, https://suitesparse-collection-website.herokuapp.com/, and the source and header file from https://math.nist.gov/MatrixMarket/mmio-c.html
+Make sure to have an .mtx file from SuiteSparse Matrix Collection, https://suitesparse-collection-website.herokuapp.com/.
