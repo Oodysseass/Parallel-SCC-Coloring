@@ -94,7 +94,7 @@ int *coloringSCC(int *rowsOutgoingEdges, int *colsOutgoingEdges, int *rowsIncomi
             BFS(colors, rowsIncomingEdges, colsIncomingEdges, uniqueColors[j], numVertices, vertices, SCCIDs);
 
         numVerticesRemaining = 0;
-        for (i = 1; i < numVertices; i++)
+        for (i = 0; i < numVertices; i++)
             if (vertices[i] != 0)
                 verticesRemaining[numVerticesRemaining++] = vertices[i];
     }
