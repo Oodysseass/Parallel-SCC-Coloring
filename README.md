@@ -12,7 +12,8 @@ Make sure to have an .mtx file from SuiteSparse Matrix Collection, https://suite
 
 To run: clone this repo, run make and use the correspoding binary with an .mtx file as argument.
 
-e.g. 
+e.g.
+
       ./ColoringSCCopenCilk celegansneural.mtx
 
 runs the openCilk implementation with celegansneural's graph as an argument.
